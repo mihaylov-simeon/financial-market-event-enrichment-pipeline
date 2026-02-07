@@ -1,0 +1,48 @@
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# ----------------------------
+# Spark / Hadoop
+# ----------------------------
+metastore_db/
+spark-warehouse/
+derby.log
+
+# ----------------------------
+# Data outputs (generated)
+# ----------------------------
+data/bronze/*
+data/silver/*
+data/gold/*
+
+# ----------------------------
+# Keep folder structure
+# ----------------------------
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+
+# ----------------------------
+# OS / Editor junk
+# ----------------------------
+.DS_Store
+.idea/
+.vscode/
+
+# ----------------------------
+# Logs
+# ----------------------------
+*.log
+
+# ----------------------------
+# Env
+# ----------------------------
+.env
+.env.*
