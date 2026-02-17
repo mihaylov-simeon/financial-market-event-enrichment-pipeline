@@ -6,7 +6,19 @@ from src.common import paths
 
 
 def build_daily_price_metrics(spark: SparkSession) -> None:
-    silver_df = read_parquet(spark, paths.SILVER_PATH)
+    silver_df = (
+            read_parquet(
+            spark, 
+            paths.SILVER_PATH)
+            .select(
+                "SYMBOL",
+                "DATE",
+                "CLOSE_PRICE",
+                "OPEN_PRICE",
+                "HIGH_PRICE",
+                "LOW_PRICE",
+            )
+        )
 
     w = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc())
     twenty_days_window = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc()).rowsBetween(-20, -1)

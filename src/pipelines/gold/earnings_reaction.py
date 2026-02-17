@@ -53,8 +53,10 @@ def build_earnings_reaction(spark: SparkSession) -> None:
     # Join Datasets
     # ======================================================
 
-    df = silver_df.join(volume_gold, ["SYMBOL", "DATE"], "left").join(
-        price_gold, ["SYMBOL", "DATE"], "left"
+    df = (
+        silver_df
+        .join(volume_gold, ["SYMBOL", "DATE"], "left")
+        .join(price_gold, ["SYMBOL", "DATE"], "left")
     )
 
     w = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc())

@@ -6,7 +6,17 @@ from src.common import paths
 
 
 def build_daily_volume_liquidity(spark: SparkSession) -> None:
-    silver_df = read_parquet(spark, paths.SILVER_PATH)
+    silver_df = (
+            read_parquet(
+            spark, 
+            paths.SILVER_PATH)
+            .select(
+                "SYMBOL",
+                "DATE",
+                "VOLUME",
+                "CLOSE_PRICE",
+            )
+        )
 
     w = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc())
     five_days_window = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc()).rowsBetween(-5, -1)
