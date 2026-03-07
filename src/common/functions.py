@@ -1,5 +1,4 @@
 from pyspark.sql import SparkSession, DataFrame
-import os
 
 def spark_session(app_name: str) -> SparkSession:
     spark = (

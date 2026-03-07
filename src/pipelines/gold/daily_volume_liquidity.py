@@ -4,6 +4,16 @@ from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
 from src.common import paths
 
+"""
+Daily Volume & Liquidity Pipeline
+---------------------------------
+
+Analyzes trading participation and liquidity conditions.
+
+This pipeline evaluates how trading volume changes over time and
+identifies abnormal volume activity that may confirm or weaken
+observed price movements.
+"""
 
 def build_daily_volume_liquidity(spark: SparkSession) -> None:
     silver_df = (
@@ -40,4 +50,14 @@ def build_daily_volume_liquidity(spark: SparkSession) -> None:
         .withColumn("20_DAY_AVG_VOLUME", F.avg("VOLUME").over(twenty_days_window))
     )
 
-    write_parquet(df, paths.GOLD_DAILY_VOLUME_LIQUIDITY_PATH, partitions=4)
+    final_df = df.select(
+        "SYMBOL",
+        "DATE",
+        "PREV_VOLUME",
+        "VOLUME_CHANGE_PCT",
+        "VOLUME_DIRECTION",
+        "5_DAY_AVG_VOLUME",
+        "20_DAY_AVG_VOLUME",
+    )
+
+    write_parquet(final_df, paths.GOLD_DAILY_VOLUME_LIQUIDITY_PATH, partitions=4)

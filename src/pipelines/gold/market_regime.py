@@ -4,15 +4,29 @@ from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
 from src.common import paths
 
+"""
+Market Regime Pipeline
+----------------------
+
+Identifies the prevailing price trend and volatility environment.
+
+This pipeline classifies whether a stock is operating in an upward,
+downward, or neutral trend and evaluates the broader volatility
+conditions influencing price behavior.
+"""
+
 def build_market_regime(spark: SparkSession) -> None:
     silver_df = (
         read_parquet(
             spark,
             paths.SILVER_PATH
+        ).select(
+            "SYMBOL",
+            "DATE"
         )
     )
 
-    gold_price = (
+    daily_price_metrics = (
         read_parquet(
             spark,
             paths.GOLD_DAILY_PRICE_METRICS_PATH
@@ -32,7 +46,7 @@ def build_market_regime(spark: SparkSession) -> None:
     )
 
     df = silver_df.join(
-        gold_price,
+        daily_price_metrics,
         on=["SYMBOL", "DATE"],
         how="left")
 
@@ -72,4 +86,16 @@ def build_market_regime(spark: SparkSession) -> None:
         )
     )
 
-    write_parquet(df, paths.GOLD_MARKET_REGIME_PATH)
+    final_df = df.select(
+        "SYMBOL",
+        "DATE",
+        "30_DAYS_AVG_SMA",
+        "100_DAYS_AVG_SMA",
+        "6_MONTHS_AVG_SMA",
+        "5_DAY_TREND_SLOPE",
+        "10_DAY_TREND_SLOPE",
+        "30_DAY_TREND_SLOPE",
+        "VOLATILITY_REGIME_FLAG",
+    )
+
+    write_parquet(final_df, paths.GOLD_MARKET_REGIME_PATH)

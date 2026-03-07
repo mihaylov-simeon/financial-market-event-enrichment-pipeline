@@ -4,6 +4,16 @@ from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
 from src.common import paths
 
+"""
+Daily Price Metrics Pipeline
+----------------------------
+
+Computes fundamental daily price behavior metrics.
+
+This pipeline measures price movement, gaps, and intraday volatility
+relative to previous trading sessions, providing a baseline description
+of how the stock price behaves day-to-day.
+"""
 
 def build_daily_price_metrics(spark: SparkSession) -> None:
     silver_df = (
@@ -58,6 +68,19 @@ def build_daily_price_metrics(spark: SparkSession) -> None:
             "20_DAY_AVG_INTRADAY_RANGE_PCT",
             F.avg("INTRADAY_RANGE_PCT").over(twenty_days_window)
         )
+    )
+
+    df = df.select(
+        "SYMBOL",
+        "DATE",
+        "PREV_CLOSE_PRICE",
+        "DAILY_RETURN_PCT",
+        "GAP_AMOUNT",
+        "GAP_DIRECTION",
+        "DAILY_DIRECTION",
+        "INTRADAY_RANGE_AMT",
+        "INTRADAY_RANGE_PCT",
+        "20_DAY_AVG_INTRADAY_RANGE_PCT"
     )
 
     write_parquet(df, paths.GOLD_DAILY_PRICE_METRICS_PATH, partitions=4)

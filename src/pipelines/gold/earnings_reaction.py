@@ -4,6 +4,16 @@ from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
 from src.common import paths
 
+"""
+Earnings Reaction Pipeline
+--------------------------
+
+Measures the market's reaction to earnings announcements.
+
+This pipeline calculates earnings surprises and analyzes price and
+volume behavior around the earnings event window to determine whether
+the market response aligns with the reported results.
+"""
 
 def build_earnings_reaction(spark: SparkSession) -> None:
 
