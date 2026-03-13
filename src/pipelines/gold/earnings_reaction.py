@@ -1,4 +1,6 @@
-import pyspark.sql.functions as F
+from pyspark.sql.functions import (
+    col, lag, when, lead
+)
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
@@ -33,17 +35,17 @@ def build_earnings_reaction(spark: SparkSession) -> None:
             "EPS_ESTIMATE",
         )
         .filter(
-            (F.col("SYMBOL").isNotNull())
-            & (F.col("DATE").isNotNull())
-            & (F.col("OPEN_PRICE").isNotNull())
-            & (F.col("CLOSE_PRICE").isNotNull())
+            (col("SYMBOL").isNotNull())
+            & (col("DATE").isNotNull())
+            & (col("OPEN_PRICE").isNotNull())
+            & (col("CLOSE_PRICE").isNotNull())
         )
     )
 
     price_gold = (
         read_parquet(spark, paths.GOLD_DAILY_PRICE_METRICS_PATH)
         .select("SYMBOL", "DATE", "INTRADAY_RANGE_PCT", "20_DAY_AVG_INTRADAY_RANGE_PCT")
-        .filter((F.col("SYMBOL").isNotNull()) & (F.col("DATE").isNotNull()))
+        .filter((col("SYMBOL").isNotNull()) & (col("DATE").isNotNull()))
     )
 
     volume_gold = (
@@ -56,7 +58,7 @@ def build_earnings_reaction(spark: SparkSession) -> None:
             "5_DAY_AVG_VOLUME",
             "20_DAY_AVG_VOLUME",
         )
-        .filter((F.col("SYMBOL").isNotNull()) & (F.col("DATE").isNotNull()))
+        .filter((col("SYMBOL").isNotNull()) & (col("DATE").isNotNull()))
     )
 
     # ======================================================
@@ -69,7 +71,7 @@ def build_earnings_reaction(spark: SparkSession) -> None:
         .join(price_gold, ["SYMBOL", "DATE"], "left")
     )
 
-    w = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc())
+    w = Window.partitionBy("SYMBOL").orderBy(col("DATE").asc())
 
     # ======================================================
     # Earnings Surprise
@@ -78,35 +80,39 @@ def build_earnings_reaction(spark: SparkSession) -> None:
     df = (
         df.withColumn(
             "EPS_SURPRISE_AMT",
-            F.when(
-                F.col("EPS").isNull() | F.col("EPS_ESTIMATE").isNull(), None
-            ).otherwise(F.col("EPS") - F.col("EPS_ESTIMATE")),
+            when(
+                (col("EPS").isNull()) |
+                (col("EPS_ESTIMATE").isNull()),
+                None
+            ).otherwise(col("EPS") - col("EPS_ESTIMATE")),
         )
         .withColumn(
             "EPS_SURPRISE_PCT",
-            F.when(
-                (F.col("EPS").isNull() | F.col("EPS_ESTIMATE").isNull())
-                | (F.col("EPS_ESTIMATE") == 0),
+            when(
+                (col("EPS").isNull()) | 
+                (col("EPS_ESTIMATE").isNull()) |
+                (col("EPS_ESTIMATE") == 0),
                 None,
             ).otherwise(
-                ((F.col("EPS") - F.col("EPS_ESTIMATE")) / F.col("EPS_ESTIMATE")) * 100
+                ((col("EPS") - col("EPS_ESTIMATE")) / col("EPS_ESTIMATE")) * 100
             ),
         )
         .withColumn(
             "SURPRISE_DIRECTION",
-            F.when(F.col("EPS_SURPRISE_PCT").isNull(), None)
-            .when(F.col("EPS_SURPRISE_PCT") > 0, "POSITIVE")
-            .when(F.col("EPS_SURPRISE_PCT") < 0, "NEGATIVE")
+            when(col("EPS_SURPRISE_PCT").isNull(), None)
+            .when(col("EPS_SURPRISE_PCT") > 0, "POSITIVE")
+            .when(col("EPS_SURPRISE_PCT") < 0, "NEGATIVE")
             .otherwise("NO_SURPRISE"),
         )
         .withColumn(
             "VOLUME_SPIKE_FLAG",
-            F.when(
-                F.col("20_DAY_AVG_VOLUME").isNull() | F.col("20_DAY_AVG_VOLUME")
-                == 0 | F.col("VOLUME").isNull(),
+            when(
+                (col("20_DAY_AVG_VOLUME").isNull()) |
+                (col("20_DAY_AVG_VOLUME") == 0) |
+                (col("VOLUME").isNull()),
                 None,
             )
-            .when(F.col("VOLUME") > 1.5 * F.col("20_DAY_AVG_VOLUME"), "SPIKE")
+            .when(col("VOLUME") > 1.5 * col("20_DAY_AVG_VOLUME"), "SPIKE")
             .otherwise("NORMAL"),
         )
     )
@@ -116,11 +122,11 @@ def build_earnings_reaction(spark: SparkSession) -> None:
     # ======================================================
 
     df = (
-        df.withColumn("PRE_EARNINGS_CLOSE", F.lag("CLOSE_PRICE").over(w))
-        .withColumn("PRE_EARNINGS_VOLUME", F.lag("VOLUME").over(w))
-        .withColumn("POST_EARNINGS_OPEN", F.lead("OPEN_PRICE").over(w))
-        .withColumn("POST_EARNINGS_CLOSE", F.lead("CLOSE_PRICE").over(w))
-        .withColumn("POST_EARNINGS_VOLUME", F.lead("VOLUME").over(w))
+        df.withColumn("PRE_EARNINGS_CLOSE", lag("CLOSE_PRICE").over(w))
+        .withColumn("PRE_EARNINGS_VOLUME", lag("VOLUME").over(w))
+        .withColumn("POST_EARNINGS_OPEN", lead("OPEN_PRICE").over(w))
+        .withColumn("POST_EARNINGS_CLOSE", lead("CLOSE_PRICE").over(w))
+        .withColumn("POST_EARNINGS_VOLUME", lead("VOLUME").over(w))
     )
 
     # ======================================================
@@ -130,39 +136,38 @@ def build_earnings_reaction(spark: SparkSession) -> None:
     df = (
         df.withColumn(
             "EARNING_DIRECTION",
-            F.when(
-                F.col("POST_EARNINGS_CLOSE").isNull()
-                | F.col("PRE_EARNINGS_CLOSE").isNull(),
+            when(
+                (col("POST_EARNINGS_CLOSE").isNull()) |
+                (col("PRE_EARNINGS_CLOSE").isNull()),
                 None,
             )
-            .when(F.col("POST_EARNINGS_CLOSE") > F.col("PRE_EARNINGS_CLOSE"), "UP")
-            .when(F.col("POST_EARNINGS_CLOSE") < F.col("PRE_EARNINGS_CLOSE"), "DOWN")
+            .when(col("POST_EARNINGS_CLOSE") > col("PRE_EARNINGS_CLOSE"), "UP")
+            .when(col("POST_EARNINGS_CLOSE") < col("PRE_EARNINGS_CLOSE"), "DOWN")
             .otherwise("FLAT"),
         )
         .withColumn(
             "EVENT_WINDOW_RETURN_PCT",
-            F.when(
-                F.col("PRE_EARNINGS_CLOSE").isNull()
-                | (F.col("PRE_EARNINGS_CLOSE") == 0)
-                | F.col("POST_EARNINGS_CLOSE").isNull(),
+            when(
+                (col("PRE_EARNINGS_CLOSE").isNull()) |
+                (col("PRE_EARNINGS_CLOSE") == 0) |
+                (col("POST_EARNINGS_CLOSE").isNull()),
                 None,
             ).otherwise(
                 (
-                    (F.col("POST_EARNINGS_CLOSE") - F.col("PRE_EARNINGS_CLOSE"))
-                    / F.col("PRE_EARNINGS_CLOSE")
+                    (col("POST_EARNINGS_CLOSE") - col("PRE_EARNINGS_CLOSE")) / col("PRE_EARNINGS_CLOSE")
                 )
                 * 100
             ),
         )
         .withColumn(
             "EARNINGS_DAY_RETURN_PCT",
-            F.when(
-                F.col("PRE_EARNINGS_CLOSE").isNull() | F.col("PRE_EARNINGS_CLOSE") == 0,
+            when(
+                (col("PRE_EARNINGS_CLOSE").isNull()) |
+                (col("PRE_EARNINGS_CLOSE") == 0),
                 None,
             ).otherwise(
                 (
-                    (F.col("CLOSE_PRICE") - F.col("PRE_EARNINGS_CLOSE"))
-                    / F.col("PRE_EARNINGS_CLOSE")
+                    (col("CLOSE_PRICE") - col("PRE_EARNINGS_CLOSE")) / col("PRE_EARNINGS_CLOSE")
                 )
                 * 100
             ),
@@ -176,47 +181,44 @@ def build_earnings_reaction(spark: SparkSession) -> None:
     df = (
         df.withColumn(
             "VOLATILITY_SPIKE_FLAG",
-            F.when(
-                F.col("20_DAY_AVG_INTRADAY_RANGE_PCT").isNull()
-                | (F.col("20_DAY_AVG_INTRADAY_RANGE_PCT") == 0)
-                | F.col("INTRADAY_RANGE_PCT").isNull(),
+            when(
+                (col("20_DAY_AVG_INTRADAY_RANGE_PCT").isNull()) |
+                (col("20_DAY_AVG_INTRADAY_RANGE_PCT") == 0) |
+                (col("INTRADAY_RANGE_PCT").isNull()),
                 None,
             )
             .when(
-                F.col("INTRADAY_RANGE_PCT")
-                > 1.5 * F.col("20_DAY_AVG_INTRADAY_RANGE_PCT"),
+                col("INTRADAY_RANGE_PCT") > 1.5 * col("20_DAY_AVG_INTRADAY_RANGE_PCT"),
                 "SPIKE",
             )
             .otherwise("NORMAL"),
         )
         .withColumn(
             "VOLATILITY_MULTIPLIER",
-            F.when(
-                F.col("20_DAY_AVG_INTRADAY_RANGE_PCT").isNull()
-                | F.col("20_DAY_AVG_INTRADAY_RANGE_PCT")
-                == 0 | F.col("INTRADAY_RANGE_PCT").isNull(),
+            when(
+                (col("20_DAY_AVG_INTRADAY_RANGE_PCT").isNull()) |
+                (col("20_DAY_AVG_INTRADAY_RANGE_PCT") == 0) |
+                (col("INTRADAY_RANGE_PCT").isNull()),
                 None,
             ).otherwise(
-                F.col("INTRADAY_RANGE_PCT") / F.col("20_DAY_AVG_INTRADAY_RANGE_PCT")
+                col("INTRADAY_RANGE_PCT") / col("20_DAY_AVG_INTRADAY_RANGE_PCT")
             ),
         )
         .withColumn(
             "EARNINGS_REACTION_STRENGTH",
-            F.when(
-                F.col("20_DAY_AVG_INTRADAY_RANGE_PCT").isNull()
-                | (F.col("20_DAY_AVG_INTRADAY_RANGE_PCT") == 0)
-                | F.col("EVENT_WINDOW_RETURN_PCT").isNull(),
+            when(
+                (col("20_DAY_AVG_INTRADAY_RANGE_PCT").isNull()) |
+                (col("20_DAY_AVG_INTRADAY_RANGE_PCT") == 0) |
+                (col("EVENT_WINDOW_RETURN_PCT").isNull()),
                 None,
             ).otherwise(
-                F.col("EVENT_WINDOW_RETURN_PCT")
-                / F.col("20_DAY_AVG_INTRADAY_RANGE_PCT")
+                col("EVENT_WINDOW_RETURN_PCT") / col("20_DAY_AVG_INTRADAY_RANGE_PCT")
             ),
         )
         .withColumn(
             "NEXT_DAY_RETURN_PCT",
             (
-                (F.col("POST_EARNINGS_CLOSE") - F.col("CLOSE_PRICE"))
-                / F.col("CLOSE_PRICE")
+                (col("POST_EARNINGS_CLOSE") - col("CLOSE_PRICE")) / col("CLOSE_PRICE")
             )
             * 100,
         )
@@ -229,69 +231,70 @@ def build_earnings_reaction(spark: SparkSession) -> None:
     df = (
         df.withColumn(
             "REACTION_ALIGNMENT_FLAG",
-            F.when(
-                F.col("SURPRISE_DIRECTION").isNull()
-                | F.col("EARNING_DIRECTION").isNull(),
+            when(
+                (col("SURPRISE_DIRECTION").isNull()) |
+                (col("EARNING_DIRECTION").isNull()),
                 None,
             )
             .when(
-                (F.col("SURPRISE_DIRECTION") == "POSITIVE")
-                & (F.col("EARNING_DIRECTION") == "UP"),
+                (col("SURPRISE_DIRECTION") == "POSITIVE") & 
+                (col("EARNING_DIRECTION") == "UP"),
                 "ALIGNED",
             )
             .when(
-                (F.col("SURPRISE_DIRECTION") == "NEGATIVE")
-                & (F.col("EARNING_DIRECTION") == "DOWN"),
+                (col("SURPRISE_DIRECTION") == "NEGATIVE") &
+                (col("EARNING_DIRECTION") == "DOWN"),
                 "ALIGNED",
             )
             .when(
-                (F.col("SURPRISE_DIRECTION") == "NO_SURPRISE")
-                | (F.col("EARNING_DIRECTION") == "FLAT"),
+                (col("SURPRISE_DIRECTION") == "NO_SURPRISE") |
+                (col("EARNING_DIRECTION") == "FLAT"),
                 "NEUTRAL",
             )
             .otherwise("MISALIGNED"),
         )
         .withColumn(
             "VOLUME_CONFIRMATION_FLAG",
-            F.when(
-                F.col("VOLUME_DIRECTION").isNull()
-                | F.col("VOLUME_SPIKE_FLAG").isNull(),
+            when(
+                (col("VOLUME_DIRECTION").isNull()) |
+                (col("VOLUME_SPIKE_FLAG").isNull()),
                 "NEUTRAL",
             )
             .when(
-                (F.col("EARNING_DIRECTION") != "FLAT")
-                & (F.col("VOLUME_SPIKE_FLAG") == "SPIKE"),
+                (col("EARNING_DIRECTION") != "FLAT") &
+                (col("VOLUME_SPIKE_FLAG") == "SPIKE"),
                 "CONFIRMED",
             )
             .when(
-                (F.col("EARNING_DIRECTION") != "FLAT")
-                & (F.col("VOLUME_SPIKE_FLAG") == "NORMAL"),
+                (col("EARNING_DIRECTION") != "FLAT") &
+                (col("VOLUME_SPIKE_FLAG") == "NORMAL"),
                 "WEAK",
             )
             .otherwise("NEUTRAL"),
         )
         .withColumn(
             "DRIFT_DIRECTION",
-            F.when(F.col("NEXT_DAY_RETURN_PCT").isNull(), None)
-            .when(F.col("NEXT_DAY_RETURN_PCT") > 0, "UP")
-            .when(F.col("NEXT_DAY_RETURN_PCT") == 0, "FLAT")
-            .when(F.col("NEXT_DAY_RETURN_PCT") < 0, "DOWN"),
+            when(col("NEXT_DAY_RETURN_PCT").isNull(), None)
+            .when(col("NEXT_DAY_RETURN_PCT") > 0, "UP")
+            .when(col("NEXT_DAY_RETURN_PCT") == 0, "FLAT")
+            .when(col("NEXT_DAY_RETURN_PCT") < 0, "DOWN"),
         )
         .withColumn(
             "DRIFT_ALIGNMENT_FLAG",
-            F.when(
-                F.col("EARNING_DIRECTION").isNull() | F.col("DRIFT_DIRECTION").isNull(),
+            when(
+                (col("EARNING_DIRECTION").isNull()) |
+                (col("DRIFT_DIRECTION").isNull()),
                 None,
             )
             .when(
-                (F.col("EARNING_DIRECTION") == "FLAT")
-                | (F.col("DRIFT_DIRECTION") == "FLAT"),
+                (col("EARNING_DIRECTION") == "FLAT") | 
+                (col("DRIFT_DIRECTION") == "FLAT"),
                 "NEUTRAL",
             )
             .when(
-                F.col("EARNING_DIRECTION") == F.col("DRIFT_DIRECTION"), "CONTINUATION"
+                col("EARNING_DIRECTION") == col("DRIFT_DIRECTION"), "CONTINUATION"
             )
-            .when(F.col("EARNING_DIRECTION") != F.col("DRIFT_DIRECTION"), "REVERSAL"),
+            .when(col("EARNING_DIRECTION") != col("DRIFT_DIRECTION"), "REVERSAL"),
         )
     )
 

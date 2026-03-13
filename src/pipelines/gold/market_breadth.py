@@ -1,32 +1,52 @@
-import pyspark.sql.functions as F
+from pyspark.sql.functions import (
+    col, when, avg, countDistinct
+)
 from pyspark.sql import SparkSession
 from src.common.functions import read_parquet, write_parquet
 from src.common import paths
 
-def market_breadth(spark: SparkSession) -> None:
+"""
+Market Breadth Pipeline
+-----------------------
+
+Summarizes overall market conditions for each trading day by aggregating
+stock-level metrics across all symbols.
+
+The pipeline measures how broadly market movements are distributed by
+calculating the percentage of stocks moving up or down, outperforming
+the market, strengthening in relative performance, and the average
+market volatility.
+
+These indicators are then combined into a daily market breadth regime
+classification describing whether the market environment is bullish,
+neutral, or bearish.
+
+"""
+
+def build_market_breadth(spark: SparkSession) -> None:
 
     daily_price_metrics = (
         read_parquet(spark, paths.GOLD_DAILY_PRICE_METRICS_PATH)
         .select("SYMBOL", "DATE", "DAILY_DIRECTION")
         .filter(
-                (F.col("SYMBOL").isNotNull()) &
-                (F.col("DATE").isNotNull())
+                (col("SYMBOL").isNotNull()) &
+                (col("DATE").isNotNull())
             )
     )
     risk_metrics = (
         read_parquet(spark, paths.GOLD_RISK_METRICS_PATH)
         .select("SYMBOL", "DATE", "ROLLING_VOLATILITY_20D")
         .filter(
-                (F.col("SYMBOL").isNotNull()) &
-                (F.col("DATE").isNotNull())
+                (col("SYMBOL").isNotNull()) &
+                (col("DATE").isNotNull())
             )
     )
     relative_strength = (
         read_parquet(spark, paths.GOLD_RELATIVE_STRENGTH_PATH)
         .select("SYMBOL", "DATE", "RELATIVE_STRENGTH_DIRECTION", "RS_TREND")
         .filter(
-                (F.col("SYMBOL").isNotNull()) &
-                (F.col("DATE").isNotNull())
+                (col("SYMBOL").isNotNull()) &
+                (col("DATE").isNotNull())
             )
     )
 
@@ -42,19 +62,36 @@ def market_breadth(spark: SparkSession) -> None:
         df
         .groupBy("DATE")
         .agg(
-            F.countDistinct("SYMBOL").alias("TOTAL_STOCKS"),
-            F.avg(F.when(F.col("DAILY_DIRECTION") == "UP", 1).otherwise(0)).alias("PCT_STOCKS_UP"),
-            F.avg(F.when(F.col("DAILY_DIRECTION") == "DOWN", 1).otherwise(0)).alias("PCT_STOCKS_DOWN"),
-            F.avg(F.when(F.col("RELATIVE_STRENGTH_DIRECTION") == "OUTPERFORM", 1).otherwise(0)).alias("PCT_STOCKS_OUTPERFORMING"),
-            F.avg(F.when(F.col("RS_TREND") == "STRENGTHENING", 1).otherwise(0)).alias("PCT_RS_STRENGTHENING"),
-            F.avg(F.col("ROLLING_VOLATILITY_20D")).alias("AVG_MARKET_VOLATILITY")
+            countDistinct("SYMBOL").alias("TOTAL_STOCKS"),
+            avg(
+                when(
+                    col("DAILY_DIRECTION") == "UP", 1)
+                    .otherwise(0)
+                ).alias("PCT_STOCKS_UP"),
+            avg(
+                when(
+                    col("DAILY_DIRECTION") == "DOWN", 1)
+                    .otherwise(0)
+                ).alias("PCT_STOCKS_DOWN"),
+            avg(when(
+                    col("RELATIVE_STRENGTH_DIRECTION") == "OUTPERFORM", 1)
+                    .otherwise(0)
+                ).alias("PCT_STOCKS_OUTPERFORMING"),
+            avg(
+                when(
+                    col("RS_TREND") == "STRENGTHENING", 1)
+                    .otherwise(0)
+                ).alias("PCT_RS_STRENGTHENING"),
+            avg(
+                    col("ROLLING_VOLATILITY_20D")
+                ).alias("AVG_MARKET_VOLATILITY")
         )
         .withColumn(
             "BREADTH_REGIME",
-            F.when(F.col("PCT_STOCKS_UP") >= 0.70, "STRONG_BULL")
-            .when(F.col("PCT_STOCKS_UP") >= 0.50, "BULL")
-            .when(F.col("PCT_STOCKS_UP") >= 0.40, "NEUTRAL")
-            .when(F.col("PCT_STOCKS_UP") >= 0.25, "BEAR")
+            when(col("PCT_STOCKS_UP") >= 0.70, "STRONG_BULL")
+            .when(col("PCT_STOCKS_UP") >= 0.50, "BULL")
+            .when(col("PCT_STOCKS_UP") >= 0.40, "NEUTRAL")
+            .when(col("PCT_STOCKS_UP") >= 0.25, "BEAR")
             .otherwise("STRONG_BEAR")
         )
     )

@@ -1,13 +1,14 @@
 from src.common.functions import spark_session
 from src.pipelines.bronze import ingest_bronze
-from src.pipelines.silver import build_silver
+from src.pipelines.silver.build_silver import build_silver
 from src.pipelines.gold import (
     daily_price_metrics,
     daily_volume_liquidity,
     earnings_reaction,
-    market_regime,
     risk_metrics,
     relative_strength,
+    market_breadth,
+    market_regime,
 ) 
 
 
@@ -21,9 +22,10 @@ def main():
     daily_price_metrics.build_daily_price_metrics(spark)
     daily_volume_liquidity.build_daily_volume_liquidity(spark)
     earnings_reaction.build_earnings_reaction(spark)
-    market_regime.build_market_regime(spark)
     risk_metrics.build_risk_metrics(spark)
     relative_strength.build_relative_strength(spark)
+    market_regime.build_market_regime(spark)
+    market_breadth.build_market_breadth(spark)
     
     spark.stop()
 

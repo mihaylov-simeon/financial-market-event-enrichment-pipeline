@@ -1,4 +1,6 @@
-import pyspark.sql.functions as F
+from pyspark.sql.functions import (
+    col, when, lag, pow, sqrt, avg, max, min
+)
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
@@ -24,9 +26,9 @@ def build_risk_metrics(spark: SparkSession) -> None:
         read_parquet(spark, paths.SILVER_PATH)
         .select("SYMBOL", "DATE", "CLOSE_PRICE")
         .filter(
-            (F.col("SYMBOL").isNotNull()) &
-            (F.col("DATE").isNotNull()) &
-            (F.col("CLOSE_PRICE").isNotNull())
+            (col("SYMBOL").isNotNull()) &
+            (col("DATE").isNotNull()) &
+            (col("CLOSE_PRICE").isNotNull())
         )
     )
 
@@ -34,8 +36,8 @@ def build_risk_metrics(spark: SparkSession) -> None:
         read_parquet(spark, paths.GOLD_DAILY_PRICE_METRICS_PATH)
         .select("SYMBOL", "DATE", "DAILY_RETURN_PCT")
         .filter(
-            (F.col("SYMBOL").isNotNull()) &
-            (F.col("DATE").isNotNull())
+            (col("SYMBOL").isNotNull()) &
+            (col("DATE").isNotNull())
         )
     )
 
@@ -43,19 +45,19 @@ def build_risk_metrics(spark: SparkSession) -> None:
         silver_df
         .join(daily_price_metrics, on=["SYMBOL", "DATE"], how="left")
     )
-
+    
     # Define 20-day rolling window
     twenty_day_window = (
         Window
         .partitionBy("SYMBOL")
-        .orderBy(F.col("DATE").asc())
+        .orderBy(col("DATE").asc())
         .rowsBetween(-20, -1)
     )
 
     lag_window = (
         Window
         .partitionBy("SYMBOL")
-        .orderBy(F.col("DATE").asc())
+        .orderBy(col("DATE").asc())
     )
 
     # Rolling Volatility
@@ -63,21 +65,21 @@ def build_risk_metrics(spark: SparkSession) -> None:
         df
         .withColumn(
             "CLOSE_PRICE_20D",
-            F.lag("CLOSE_PRICE", 20).over(lag_window)
+            lag("CLOSE_PRICE", 20).over(lag_window)
         )
         .withColumn(
             "AVG_RETURN_20D",
-            F.avg("DAILY_RETURN_PCT").over(twenty_day_window)
+            avg("DAILY_RETURN_PCT").over(twenty_day_window)
         )
         .withColumn(
             "VARIANCE_20D",
-            F.avg(
-                F.pow(F.col("DAILY_RETURN_PCT") - F.col("AVG_RETURN_20D"), 2)
+            avg(
+                pow(col("DAILY_RETURN_PCT") - col("AVG_RETURN_20D"), 2)
             ).over(twenty_day_window)
         )
         .withColumn(
             "ROLLING_VOLATILITY_20D",
-            F.sqrt("VARIANCE_20D")
+            sqrt("VARIANCE_20D")
         )
     )
 
@@ -86,25 +88,25 @@ def build_risk_metrics(spark: SparkSession) -> None:
         df
         .withColumn(
             "ROLLING_MAX_CLOSE_20D",
-            F.max("CLOSE_PRICE").over(twenty_day_window)
+            max("CLOSE_PRICE").over(twenty_day_window)
         )
         .withColumn(
             "DRAWDOWN_TODAY",
-            (F.col("CLOSE_PRICE") / F.col("ROLLING_MAX_CLOSE_20D")) - 1
+            (col("CLOSE_PRICE") / col("ROLLING_MAX_CLOSE_20D")) - 1
         )
         .withColumn(
             "MAX_DRAWDOWN_LOOKBACK",
-            F.min("DRAWDOWN_TODAY").over(twenty_day_window)
+            min("DRAWDOWN_TODAY").over(twenty_day_window)
         )
         .withColumn(
             "ROLLING_RETURN_20D",
-            (F.col("CLOSE_PRICE") / F.col("CLOSE_PRICE_20D")) - 1
+            (col("CLOSE_PRICE") / col("CLOSE_PRICE_20D")) - 1
         )
         .withColumn(
             "RISK_ADJUSTED_RETURN_20D",
-            F.when(
-                F.col("ROLLING_VOLATILITY_20D") > 0,
-                F.col("ROLLING_RETURN_20D") / F.col("ROLLING_VOLATILITY_20D")
+            when(
+                col("ROLLING_VOLATILITY_20D") > 0,
+                col("ROLLING_RETURN_20D") / col("ROLLING_VOLATILITY_20D")
             )
         )
     )
@@ -121,4 +123,4 @@ def build_risk_metrics(spark: SparkSession) -> None:
         )
     )
 
-    write_parquet(final_df, paths.GOLD_RISK_METRICS)
+    write_parquet(final_df, paths.GOLD_RISK_METRICS_PATH)

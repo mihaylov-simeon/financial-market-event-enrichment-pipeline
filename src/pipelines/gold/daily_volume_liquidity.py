@@ -1,4 +1,6 @@
-import pyspark.sql.functions as F
+from pyspark.sql.functions import (
+    col, when, lag, avg
+)
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 from src.common.functions import read_parquet, write_parquet
@@ -28,26 +30,26 @@ def build_daily_volume_liquidity(spark: SparkSession) -> None:
             )
         )
 
-    w = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc())
-    five_days_window = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc()).rowsBetween(-5, -1)
-    twenty_days_window = Window.partitionBy("SYMBOL").orderBy(F.col("DATE").asc()).rowsBetween(-20, -1)
+    w = Window.partitionBy("SYMBOL").orderBy(col("DATE").asc())
+    five_days_window = Window.partitionBy("SYMBOL").orderBy(col("DATE").asc()).rowsBetween(-5, -1)
+    twenty_days_window = Window.partitionBy("SYMBOL").orderBy(col("DATE").asc()).rowsBetween(-20, -1)
 
     df = (
         silver_df
-        .withColumn("PREV_VOLUME", F.lag("VOLUME").over(w))
+        .withColumn("PREV_VOLUME", lag("VOLUME").over(w))
         .withColumn(
             "VOLUME_CHANGE_PCT",
-            F.when(F.col("PREV_VOLUME").isNull() | (F.col("PREV_VOLUME") == 0), None)
-             .otherwise(((F.col("VOLUME") - F.col("PREV_VOLUME")) / F.col("PREV_VOLUME")) * 100)
+            when(col("PREV_VOLUME").isNull() | (col("PREV_VOLUME") == 0), None)
+             .otherwise(((col("VOLUME") - col("PREV_VOLUME")) / col("PREV_VOLUME")) * 100)
         )
         .withColumn(
             "VOLUME_DIRECTION",
-            F.when(F.col("VOLUME") > F.col("PREV_VOLUME"), "UP")
-             .when(F.col("VOLUME") < F.col("PREV_VOLUME"), "DOWN")
+            when(col("VOLUME") > col("PREV_VOLUME"), "UP")
+             .when(col("VOLUME") < col("PREV_VOLUME"), "DOWN")
              .otherwise("FLAT")
         )
-        .withColumn("5_DAY_AVG_VOLUME", F.avg("VOLUME").over(five_days_window))
-        .withColumn("20_DAY_AVG_VOLUME", F.avg("VOLUME").over(twenty_days_window))
+        .withColumn("5_DAY_AVG_VOLUME", avg("VOLUME").over(five_days_window))
+        .withColumn("20_DAY_AVG_VOLUME", avg("VOLUME").over(twenty_days_window))
     )
 
     final_df = df.select(
