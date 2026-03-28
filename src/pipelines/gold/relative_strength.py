@@ -6,6 +6,19 @@ from src.common import paths
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 
+"""
+Relative Strength Pipeline
+--------------------------
+
+Compares each stock’s 20-day return to SPY’s 20-day return 
+and classifies the stock as outperforming, underperforming, 
+or neutral, then tracks whether that relative gap is strengthening 
+or weakening.
+
+This gives a quick signal of whether individual 
+stocks are gaining or losing momentum relative to the broad market trend.
+"""
+
 def build_relative_strength(spark: SparkSession) -> None:
     risk_metrics_df = (
         read_parquet(spark, paths.GOLD_RISK_METRICS_PATH)

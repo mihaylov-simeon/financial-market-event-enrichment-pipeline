@@ -19,10 +19,6 @@ the market response aligns with the reported results.
 
 def build_earnings_reaction(spark: SparkSession) -> None:
 
-    # ======================================================
-    # Read Silver and Gold Datasets
-    # ======================================================
-
     silver_df = (
         read_parquet(spark, paths.SILVER_PATH)
         .select(
@@ -61,9 +57,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
         .filter((col("SYMBOL").isNotNull()) & (col("DATE").isNotNull()))
     )
 
-    # ======================================================
-    # Join Datasets
-    # ======================================================
 
     df = (
         silver_df
@@ -73,9 +66,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
 
     w = Window.partitionBy("SYMBOL").orderBy(col("DATE").asc())
 
-    # ======================================================
-    # Earnings Surprise
-    # ======================================================
 
     df = (
         df.withColumn(
@@ -117,10 +107,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
         )
     )
 
-    # ======================================================
-    # Event Window Context
-    # ======================================================
-
     df = (
         df.withColumn("PRE_EARNINGS_CLOSE", lag("CLOSE_PRICE").over(w))
         .withColumn("PRE_EARNINGS_VOLUME", lag("VOLUME").over(w))
@@ -129,9 +115,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
         .withColumn("POST_EARNINGS_VOLUME", lead("VOLUME").over(w))
     )
 
-    # ======================================================
-    # Event Window Reaction
-    # ======================================================
 
     df = (
         df.withColumn(
@@ -173,10 +156,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
             ),
         )
     )
-
-    # ======================================================
-    # Volatility Context
-    # ======================================================
 
     df = (
         df.withColumn(
@@ -223,10 +202,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
             * 100,
         )
     )
-
-    # ======================================================
-    # Reaction Alignment
-    # ======================================================
 
     df = (
         df.withColumn(
@@ -297,10 +272,6 @@ def build_earnings_reaction(spark: SparkSession) -> None:
             .when(col("EARNING_DIRECTION") != col("DRIFT_DIRECTION"), "REVERSAL"),
         )
     )
-
-    # ======================================================
-    # Final Ordered Schema
-    # ======================================================
 
     df = df.select(
         # Identity
