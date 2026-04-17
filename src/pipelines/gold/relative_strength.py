@@ -29,7 +29,7 @@ def build_relative_strength(spark: SparkSession) -> None:
         )
     )
 
-    index_df = (
+    silver_df = (
         read_parquet(spark, paths.SILVER_PATH)
         .select("SYMBOL", "DATE", "CLOSE_PRICE")
         .filter(
@@ -41,8 +41,8 @@ def build_relative_strength(spark: SparkSession) -> None:
 
     w = Window.partitionBy("SYMBOL").orderBy(col("DATE").asc())
 
-    index_df = (
-        index_df
+    silver_df = (
+        silver_df
             .withColumn(
                 "INDEX_CLOSE_20D_AGO",
                 lag("CLOSE_PRICE", 20).over(w)
@@ -63,7 +63,7 @@ def build_relative_strength(spark: SparkSession) -> None:
         )
     
     df = risk_metrics_df.join(
-            broadcast(index_df), 
+            broadcast(silver_df), 
             on="DATE", 
             how="left"
         )
